@@ -3,7 +3,7 @@ import requests
 import re
 import pprint
 import os
-from database import VotingTopics
+#from database import VotingTopics
 
 
 class Bot():
@@ -22,7 +22,7 @@ class Bot():
         self.subscribed_streams = subscribed_streams
         self.client = zulip.Client(zulip_username, zulip_api_key)
         self.subscriptions = self.subscribe_to_streams()
-        self.voting_topics = VotingTopics()
+        self.voting_topics = {}
 
     @property
     def streams(self):
@@ -103,16 +103,15 @@ class Bot():
                 keyword = split_msg[1]
                 regex = re.compile("[0-9]+")
 
-                if keyword.lower().strip() == "results":
+                if keyword.lower().strip() == "who's in":
                     self.send_results(msg)
+
+                elif keyword.lower().strip() == "i'm in":
+                    print 'rsvp recorded'
+                    self.add_vote(title.lower(), 0, msg)
 
                 elif regex.match(keyword):
                     self.add_vote(title.lower(), int(keyword), msg)
-
-                elif "add:" in keyword.lower():
-                    new_voting_option = keyword[4:].strip()
-                    self.add_voting_option(msg, title,
-                                           new_voting_option)
 
                 else:
                     self.send_help(msg)
@@ -168,10 +167,10 @@ class Bot():
         if title:
             msg["content"] = title
             options = msg_content.split("\n")[1:]
-            options_dict = {}
+            options_dict = {0: ['Default', 0, [], []]}
 
             for x in range(len(options)):
-                options_dict[x] = [options[x], 0]
+                options_dict[x] = [options[x], 0, [], []]
                 msg["content"] += "\n " + str(x) + ". " + options[x]
 
             self.voting_topics[title.lower().strip()] = {"title": title,
@@ -221,6 +220,10 @@ class Bot():
 
             if msg["sender_email"] not in vote["people_who_have_voted"]:
                 vote["options"][option_number][1] += 1
+                vote["options"][option_number][2].append(msg["sender_email"])
+                vote["options"][option_number][3].append(msg["sender_full_name"])
+                print vote
+
                 vote["people_who_have_voted"][
                     (msg["sender_email"])] = option_number
                 msg["content"] = self._get_add_vote_msg(msg, vote,
@@ -284,11 +287,21 @@ class Bot():
 
         if title in self.voting_topics.keys():
             vote = self.voting_topics[title]
-            results = "The results are in!!!! \nTopic: " + vote["title"]
+            results = vote["title"]
 
-            for option in vote["options"].values():
-                results += "\n{0} has {1} votes.".format(
-                    option[0], str(option[1]))
+            if len(vote["options"]) == 1:
+                import pdb; pdb.set_trace()
+                results += " participants (" + str(vote["options"][0][1]) + "): "
+                results += ', '.join(vote["options"][0][3])
+
+                #results += "\nParticipants' emails: "
+            else:
+
+                for option in vote["options"].values():
+
+                    results += "\n{0} participants ({1}): ".format(
+                        option[0], str(option[1]))
+                    results += ', '.join(option[3])
 
             msg["content"] = results
             self.send_message(msg)
@@ -305,9 +318,9 @@ class Bot():
 
 
 def main():
-    zulip_username = 'voting-bot@students.hackerschool.com'
+    zulip_username = 'rsvpbot-bot@students.hackerschool.com'
     zulip_api_key = os.environ['ZULIP_API_KEY']
-    key_word = 'VotingBot'
+    key_word = 'RSVPbot'
 
     subscribed_streams = []
 
